@@ -64,5 +64,10 @@ int main() {
     cudaFree(d_y);
     cudaFree(d_out);
 
+    free(x);
+    free(y);
+    free(out_gpu);
+    free(out_cpu);
+
     return 0;
 }
