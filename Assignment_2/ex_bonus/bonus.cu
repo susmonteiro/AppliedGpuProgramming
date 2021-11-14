@@ -7,7 +7,7 @@
 #define count 100
 
 
-__global__ void kernel(float* c, curandState *states){
+__global__ void kernel(int* c, curandState *states){
     int id = threadIdx.x + blockDim.x * blockIdx.x;
 	
 	int seed = id; // different seed per thread
@@ -29,8 +29,8 @@ int main() {
     curandState *dev_random;
     cudaMalloc((void**)&dev_random, NUM_ITER*sizeof(curandState));
 
-    float* d_c;
-    cudaMalloc(&d_c, NUM_ITER * sizeof(float));
+    int* d_c;
+    cudaMalloc(&d_c, NUM_ITER * sizeof(int));
     // cudaMemset(d_c, 0, NUM_ITER * sizeof(int));
     
     clock_t t;
