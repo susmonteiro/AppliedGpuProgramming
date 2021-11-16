@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <time.h>
 
-#define NUM_ITER 2000000
-#define count 100
+#define NUM_ITER 20
+#define count 1000000
 
 
 __global__ void kernel(int* c, curandState *states){
@@ -21,37 +21,46 @@ __global__ void kernel(int* c, curandState *states){
     }
     
     c[id] = inside;
-    
+    // printf("[%d] %d\n", id, c[id]);
     return;
 }
 
 int main() {
     curandState *dev_random;
-    cudaMalloc((void**)&dev_random, NUM_ITER*sizeof(curandState));
+    cudaMalloc((void**)&dev_random, size_t(NUM_ITER) * sizeof(curandState));
 
-    int* d_c;
-    cudaMalloc(&d_c, NUM_ITER * sizeof(int));
-    // cudaMemset(d_c, 0, NUM_ITER * sizeof(int));
+    int* d_c = NULL;
+    cudaMalloc((void**)&d_c, size_t(NUM_ITER) * sizeof(int));
     
+    // Time
     clock_t t;
     t = clock();
 
-    kernel<<<(NUM_ITER + 255) / 256, 256>>>(d_c, dev_random);
-
-    int* out_gpu = (int*)malloc(NUM_ITER * sizeof(int));
+    kernel<<<(size_t(NUM_ITER) + 127) / 128, 128>>>(d_c, dev_random);
     cudaDeviceSynchronize();
-    cudaMemcpy(out_gpu, d_c, NUM_ITER * sizeof(int), cudaMemcpyDeviceToHost);
+
+
+    int* out_gpu = (int*) malloc(size_t(NUM_ITER) * sizeof(int));
+    memset(out_gpu, 0, size_t(NUM_ITER) * sizeof(int));
+    cudaMemcpy(out_gpu, d_c, size_t(NUM_ITER) * sizeof(int), cudaMemcpyDeviceToHost);
+
+    
+    // Time
     t = clock() - t;
+    printf("Time: %f\n", ((float)t)/CLOCKS_PER_SEC);
 
-    printf("Time: %f\n", ((double)t)/CLOCKS_PER_SEC);
-
-    unsigned long long sum = 0;
-    for(int i = 0; i < NUM_ITER; i++) {
+    int sum = 0;
+    for(int i = 0; i < size_t(NUM_ITER); i++) {
+        // printf("After [%d] %d\n", i, out_gpu[i]);
         sum += out_gpu[i];
     }
 
-    double pi = 4 * ((double)sum / (count * NUM_ITER));
-    printf("%f\n", pi);
+    float pi = 4 * ((float) sum / (count * size_t(NUM_ITER)));
+    printf("PI=%f\n", pi);
+
+    cudaFree(d_c);
+    cudaFree(dev_random);
+    free(out_gpu);
 
     return 0;
 }
