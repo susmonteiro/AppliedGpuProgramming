@@ -47,13 +47,19 @@ int main(int argc, char **argv) {
     Particle* particles_cpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
     // Particle* particles_gpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
 
-	// Allocating particles_gpu in pinned memory
+	// using managed memory allocator
 	Particle* particles_gpu;
-	cudaMallocHost(&particles_gpu, sizeof(Particle) * NUM_PARTICLES);
+	// cudaMallocHost(&particles_gpu, sizeof(Particle) * NUM_PARTICLES);
+	cudaMallocManaged(&particles_gpu, sizeof(Particle) * NUM_PARTICLES);
 
-    float *rn_x = (float*)malloc(sizeof(float) * NUM_PARTICLES);
-    float *rn_y = (float*)malloc(sizeof(float) * NUM_PARTICLES);
-    float *rn_z = (float*)malloc(sizeof(float) * NUM_PARTICLES);
+	float* rn_x, rn_y, rn_z;
+	// float *rn_x = (float*)malloc(sizeof(float) * NUM_PARTICLES);
+    // float *rn_y = (float*)malloc(sizeof(float) * NUM_PARTICLES);
+    // float *rn_z = (float*)malloc(sizeof(float) * NUM_PARTICLES);
+    cudaMallocManaged(&rn_x, sizeof(float) * NUM_PARTICLES);
+	cudaMallocManaged(&rn_y, sizeof(float) * NUM_PARTICLES);
+	cudaMallocManaged(&rn_z, sizeof(float) * NUM_PARTICLES);
+
 
     for (int i = 0; i < NUM_PARTICLES; i++) {
         rn_x[i] = ((float)(rand() % 10000 - 5000))/10000000000;
@@ -81,13 +87,14 @@ int main(int argc, char **argv) {
 
     iStart = cpuSecond();
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
-		cudaMemcpy(d_rnx, rn_x, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_rny, rn_y, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_rnz, rn_z, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
-        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz);
+		// cudaMemcpy(d_rnx, rn_x, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+	    // cudaMemcpy(d_rny, rn_y, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+	    // cudaMemcpy(d_rnz, rn_z, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+	    // cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
+        // gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz);
+		gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(particles_gpu, rn_x, rn_y, rn_z);
 		cudaDeviceSynchronize();
-		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDeviceToHost);
+		// cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDeviceToHost);
     }
 
     double iGPUElaps = cpuSecond() - iStart;
@@ -108,10 +115,10 @@ int main(int argc, char **argv) {
     if (i == NUM_PARTICLES) printf("Comparing the output for each implementation... Correct!\n");
     else printf("Comparing the output for each implementation... Incorrect :(\n");
 
-    cudaFree(d_particles);
-    cudaFree(d_rnx);
-    cudaFree(d_rny);
-    cudaFree(d_rnz);
+    // cudaFree(d_particles);
+    // cudaFree(d_rnx);
+    // cudaFree(d_rny);
+    // cudaFree(d_rnz);
 	cudaFree(particles_gpu);  // because it was allocated with cuda
 
     free(particles_cpu);
