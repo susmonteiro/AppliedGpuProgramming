@@ -6,6 +6,7 @@
 
 #define BLOCK_SIZE  16
 #define HEADER_SIZE 138
+#define BLOCK_SIZE_SH 18
 
 typedef unsigned char BYTE;
 
@@ -176,6 +177,7 @@ void cpu_grayscale(int width, int height, float *image, float *image_out)
  */
 __global__ void gpu_grayscale(int width, int height, float *image, float *image_out)
 {
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
@@ -260,19 +262,45 @@ __global__ void gpu_gaussian(int width, int height, float *image, float *image_o
     float gaussian[9] = { 1.0f / 16.0f, 2.0f / 16.0f, 1.0f / 16.0f,
                           2.0f / 16.0f, 4.0f / 16.0f, 2.0f / 16.0f,
                           1.0f / 16.0f, 2.0f / 16.0f, 1.0f / 16.0f };
+
+    __shared__ float sh_block[BLOCK_SIZE_SH * BLOCK_SIZE_SH];
     
-    int index_x = blockIdx.x * blockDim.x + threadIdx.x;
-    int index_y = blockIdx.y * blockDim.y + threadIdx.y;
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    int offset_t = y * width + x;
+    int offset   = (y + 1) * width + (x + 1);
+
+    int shared_offset = (threadIdx.y + 1) * BLOCK_SIZE_SH + (threadIdx.x + 1);
     
-    if (index_x < (width - 2) && index_y < (height - 2))
     {
-        int offset_t = index_y * width + index_x;
-        int offset   = (index_y + 1) * width + (index_x + 1);
-        
-        image_out[offset] = gpu_applyFilter(&image[offset_t],
-                                            width, gaussian, 3);
+
+        if((y + 1) % BLOCK_SIZE == 0) { // Pixel on the bottom horizontal edge, copy pixels to the bottom
+            sh_block[shared_offset + BLOCK_SIZE_SH] = image[offset_t + width];
+            sh_block[shared_offset + 2*BLOCK_SIZE_SH] = image[offset_t + 2*width];
+        }
+        if((x + 1) % BLOCK_SIZE == 0) { // Pixel on the right vertical edge, copy pixels to the right
+            sh_block[shared_offset + 1] = image[offset_t + 1];
+            sh_block[shared_offset + 2] = image[offset_t + 2];
+        }
+        if(((x + 1) % BLOCK_SIZE == 0) && ((y + 1) % BLOCK_SIZE == 0)) { // Pixel in the right bottom corner, copy remaining pixels on diagonal of the block
+            sh_block[shared_offset + BLOCK_SIZE_SH + 1] = image[offset_t + width + 1];
+            sh_block[shared_offset + 2 * BLOCK_SIZE_SH + 1] = image[offset_t + 2 * width + 1];
+            sh_block[shared_offset + BLOCK_SIZE_SH + 2] = image[offset_t + width + 2];
+            sh_block[shared_offset + 2 * BLOCK_SIZE_SH + 2] = image[offset_t + 2 * width + 2];
+        }
+
+
+        sh_block[shared_offset] = image[offset_t];
+        __syncthreads();
+
+        if(x < (width - 2) && y < (height - 2)){
+            image_out[offset] = gpu_applyFilter(&sh_block[shared_offset], BLOCK_SIZE_SH, gaussian, 3);
+        }
     }
 }
+
+    
 
 /**
  * Calculates the gradient of an image using a Sobel filter on the CPU.
@@ -315,17 +343,51 @@ __global__ void gpu_sobel(int width, int height, float *image, float *image_out)
                          0.0f,  0.0f,  0.0f,
                         -1.0f, -2.0f, -1.0f };
 
+
+    __shared__ float sh_block[BLOCK_SIZE_SH * BLOCK_SIZE_SH];
+
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;
 
-    if(!(x >= 0 && x < width - 2 && y >= 0 && y < height - 2)) return;
+    int offset_t = y * width + x;
+    int offset   = (y + 1) * width + (x + 1);
 
-    float gx = gpu_applyFilter(&image[y * width + x], width, sobel_x, 3);
-    float gy = gpu_applyFilter(&image[y * width + x], width, sobel_y, 3);
+    int shared_offset = (threadIdx.y + 1) * BLOCK_SIZE_SH + (threadIdx.x + 1);
+
+    {
+
+        if((y + 1) % BLOCK_SIZE == 0) { // Pixel on the bottom horizontal edge, copy pixels to the bottom
+            sh_block[shared_offset + BLOCK_SIZE_SH] = image[offset_t + width];
+            sh_block[shared_offset + 2*BLOCK_SIZE_SH] = image[offset_t + 2*width];
+        }
+        if((x + 1) % BLOCK_SIZE == 0) { // Pixel on the right vertical edge, copy pixels to the right
+            sh_block[shared_offset + 1] = image[offset_t + 1];
+            sh_block[shared_offset + 2] = image[offset_t + 2];
+        }
+        if(((x + 1) % BLOCK_SIZE == 0) && ((y + 1) % BLOCK_SIZE == 0)) { // Pixel in the right bottom corner, copy remaining pixels on diagonal of the block
+            sh_block[shared_offset + BLOCK_SIZE_SH + 1] = image[offset_t + width + 1];
+            sh_block[shared_offset + 2 * BLOCK_SIZE_SH + 1] = image[offset_t + 2 * width + 1];
+            sh_block[shared_offset + BLOCK_SIZE_SH + 2] = image[offset_t + width + 2];
+            sh_block[shared_offset + 2 * BLOCK_SIZE_SH + 2] = image[offset_t + 2 * width + 2];
+        }
+
+
+        sh_block[shared_offset] = image[offset_t];
+        __syncthreads();
+
+        if(x < (width - 2) && y < (height - 2)){
+            float gx = gpu_applyFilter(&sh_block[shared_offset], BLOCK_SIZE_SH, sobel_x, 3);
+            float gy = gpu_applyFilter(&sh_block[shared_offset], BLOCK_SIZE_SH, sobel_y, 3);
+            image_out[(y + 1) * width + (x + 1)] = sqrtf(gx * gx + gy * gy);
+        }
+    }
+
+
+    
     
     // Note: The output can be negative or exceed the max. color value
     // of 255. We compensate this afterwards while storing the file.
-    image_out[(y + 1) * width + (x + 1)] = sqrtf(gx * gx + gy * gy);
+    
 }
 
 int main(int argc, char **argv)
