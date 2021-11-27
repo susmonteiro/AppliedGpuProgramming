@@ -103,24 +103,25 @@ int main(int argc, char **argv) {
 
     // iStart = cpuSecond();
     cudaStream_t stream;
+    int offset;
+    int batch;
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
         int stream_n = 0;
-        int offset = 0;
-        for (int batch = 0; batch < NUM_BATCHES; batch++) {
+        for (batch = 0; batch < NUM_BATCHES; batch++) {
             stream = streams[stream_n];
+            offset = batch * BATCH_SIZE;
 
             cudaMemcpyAsync(&d_particles[offset], &particles_gpu[offset], BATCH_SIZE*sizeof(Particle), cudaMemcpyHostToDevice, stream);
-            gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(&d_particles[offset], BATCH_SIZE);    
+            gpu_update_position<<<(BATCH_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(&d_particles[offset], BATCH_SIZE);    
             cudaMemcpyAsync(&particles_gpu[offset], &d_particles[offset], BATCH_SIZE*sizeof(Particle), cudaMemcpyDeviceToHost, stream);
             
             stream_n = (stream_n + 1) % NUM_STREAMS;
-            offset = batch * BATCH_SIZE;
         }
-
+        offset = batch * BATCH_SIZE;
         stream = streams[stream_n];
 
         cudaMemcpyAsync(&d_particles[offset], &particles_gpu[offset], LAST_BATCH*sizeof(Particle), cudaMemcpyHostToDevice, stream);
-        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(&d_particles[offset], LAST_BATCH);  
+        gpu_update_position<<<(BATCH_SIZE + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE, 0, stream>>>(&d_particles[offset], LAST_BATCH);  
         cudaMemcpyAsync(&particles_gpu[offset], &d_particles[offset], LAST_BATCH*sizeof(Particle), cudaMemcpyDeviceToHost, stream);
         
         cudaDeviceSynchronize();
