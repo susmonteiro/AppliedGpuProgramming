@@ -87,11 +87,11 @@ int main(int argc, char **argv) {
 
     iStart = cpuSecond();
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
-	    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDefault);
+	    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
         gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz, NUM_PARTICLES);
-		cudaDeviceSynchronize();
-		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDefault);
+		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
     }
+    cudaDeviceSynchronize();
 
     double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");

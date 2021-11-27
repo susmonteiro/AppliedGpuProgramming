@@ -78,8 +78,8 @@ int main(int argc, char **argv) {
     iStart = cpuSecond();
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
 		gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(particles_gpu, rn_x, rn_y, rn_z, NUM_PARTICLES);
-		cudaDeviceSynchronize();
     }
+    cudaDeviceSynchronize();
 
     double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");
