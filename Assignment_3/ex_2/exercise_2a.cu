@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <sys/time.h>
+// #include <sys/time.h>
 
 typedef struct particle {
     float3 position;
@@ -12,14 +12,17 @@ double cpuSecond() {
    return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
 }
 
-__global__ void gpu_update_position(Particle* particles, float* rnx, float* rny, float* rnz) {
+__global__ void gpu_update_position(Particle* particles, float* rnx, float* rny, float* rnz, int nparticles) {
     const int i = threadIdx.x + blockDim.x * blockIdx.x;
-    particles[i].velocity.x = particles[i].velocity.x + rnx[i];
-    particles[i].velocity.y = particles[i].velocity.y + rny[i];
-    particles[i].velocity.z = particles[i].velocity.z + rnz[i];
-    particles[i].position.x = particles[i].position.x + particles[i].velocity.x;
-    particles[i].position.y = particles[i].position.y + particles[i].velocity.y;
-    particles[i].position.z = particles[i].position.z + particles[i].velocity.z;
+
+    if (i < nparticles) {
+        particles[i].velocity.x = particles[i].velocity.x + rnx[i];
+        particles[i].velocity.y = particles[i].velocity.y + rny[i];
+        particles[i].velocity.z = particles[i].velocity.z + rnz[i];
+        particles[i].position.x = particles[i].position.x + particles[i].velocity.x;
+        particles[i].position.y = particles[i].position.y + particles[i].velocity.y;
+        particles[i].position.z = particles[i].position.z + particles[i].velocity.z;
+    }
 }
 
 void cpu_update_position(Particle* particles, float* random_x, float* random_y, float* random_z, int NUM_PARTICLES, int NUM_ITERATIONS) {
@@ -38,14 +41,13 @@ void cpu_update_position(Particle* particles, float* random_x, float* random_y, 
 int main(int argc, char **argv) {
     int NUM_PARTICLES = 10000;
     int BLOCK_SIZE = 32;
-    int NUM_ITERATIONS = 10000;
+    int NUM_ITERATIONS = 1;
 
     if (argc > 1) NUM_PARTICLES = atoi(argv[1]);
     if (argc > 2) BLOCK_SIZE = atoi(argv[2]);
     if (argc > 3) NUM_ITERATIONS = atoi(argv[3]);
 
     Particle* particles_cpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
-    // Particle* particles_gpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
 
 	// Allocating particles_gpu in pinned memory
 	Particle* particles_gpu;
@@ -75,24 +77,24 @@ int main(int argc, char **argv) {
     cudaMalloc(&d_rny, NUM_PARTICLES*sizeof(float));
     cudaMalloc(&d_rnz, NUM_PARTICLES*sizeof(float));
 
+    cudaMemcpy(d_rnx, rn_x, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_rny, rn_y, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_rnz, rn_z, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
+
 	// Modify the program, such that
 	// All particles are copied to the GPU at the beginning of a time step.
 	// All the particles are copied back to the host after the kernel completes, before proceeding to the next time step.
 
     iStart = cpuSecond();
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
-		cudaMemcpy(d_rnx, rn_x, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_rny, rn_y, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_rnz, rn_z, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-	    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
-        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz);
+	    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDefault);
+        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz, NUM_PARTICLES);
 		cudaDeviceSynchronize();
-		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDeviceToHost);
+		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDefault);
     }
 
     double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");
-    // printf("Time elapsed GPU: %f\n", iGPUElaps); //original print message
 	printf("Time elapsed GPU including copying time: %f\n", iGPUElaps);
 
 
@@ -112,10 +114,9 @@ int main(int argc, char **argv) {
     cudaFree(d_rnx);
     cudaFree(d_rny);
     cudaFree(d_rnz);
-	cudaFree(particles_gpu);  // because it was allocated with cuda
+	cudaFreeHost(particles_gpu);  // because it was allocated with cudaMallocHost
 
     free(particles_cpu);
-    // free(particles_gpu);
     free(rn_x);
     free(rn_y);
     free(rn_z);
