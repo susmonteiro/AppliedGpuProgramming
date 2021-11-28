@@ -1,5 +1,5 @@
 #include <stdio.h>
-// #include <sys/time.h>
+#include <sys/time.h>
 
 #define MIN(a, b) (a < b) ? a : b
 
@@ -8,11 +8,11 @@ typedef struct particle {
     float3 velocity;
 } Particle;
 
-/* double cpuSecond() {
+double cpuSecond() {
    struct timeval tp;
    gettimeofday(&tp,NULL);
    return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
-} */
+}
 
 __global__ void gpu_update_position(Particle* particles, int size) {
     const int i = threadIdx.x + blockDim.x * blockIdx.x;
@@ -84,11 +84,11 @@ int main(int argc, char **argv) {
 
     generatePositions(particles_cpu, particles_gpu, NUM_PARTICLES);
 
-    // double iStart = cpuSecond();
+    double iStart = cpuSecond();
     cpu_update_position(particles_cpu, NUM_PARTICLES, NUM_ITERATIONS);
-    // double iCPUElaps = cpuSecond() - iStart;
+    double iCPUElaps = cpuSecond() - iStart;
     printf("Computing on the CPU... Done!\n\n");
-    // printf("Time elapsed CPU: %f\n", iCPUElaps);
+    printf("Time elapsed CPU: %f\n", iCPUElaps);
 
     Particle *d_particles;
     cudaMalloc(&d_particles, NUM_PARTICLES*sizeof(Particle));
@@ -101,7 +101,7 @@ int main(int argc, char **argv) {
 	// All particles are copied to the GPU at the beginning of a time step.
 	// All the particles are copied back to the host after the kernel completes, before proceeding to the next time step.
 
-    // iStart = cpuSecond();
+    iStart = cpuSecond();
     cudaStream_t stream;
     int offset;
     int batch;
@@ -127,9 +127,9 @@ int main(int argc, char **argv) {
         cudaDeviceSynchronize();
     }
 
-    // double iGPUElaps = cpuSecond() - iStart;
+    double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");
-	// printf("Time elapsed GPU including copying time: %f\n", iGPUElaps);
+	printf("Time elapsed GPU including copying time: %f\n", iGPUElaps);
 
     // Destroy Streams
     destroyStreams(streams, NUM_STREAMS);
