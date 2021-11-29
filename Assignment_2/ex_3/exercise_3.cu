@@ -73,19 +73,18 @@ int main(int argc, char **argv) {
 
     Particle *d_particles;
 
-    cudaMalloc(&d_particles, NUM_PARTICLES*sizeof(Particle));
-    cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
-    
     iStart = cpuSecond();
+    cudaMalloc(&d_particles, NUM_PARTICLES*sizeof(Particle));
+    
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
+        cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
         gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, NUM_PARTICLES);
+        cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDeviceToHost);
     }
-    cudaDeviceSynchronize();
     double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");
     printf("Time elapsed GPU: %f\n", iGPUElaps);
 
-    cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyDeviceToHost);
 
     // Compare results
     int i;

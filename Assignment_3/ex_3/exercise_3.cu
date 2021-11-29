@@ -65,10 +65,10 @@ void destroyStreams(cudaStream_t *streams, int nstreams) {
 
 int main(int argc, char **argv) {
 
-    const int NUM_PARTICLES =  (argc > 1) ? atoi(argv[1]) : 100000;
+    const int BATCH_SIZE = (argc > 1) ? atoi(argv[1]) : 2048;
     const int BLOCK_SIZE = (argc > 2) ? atoi(argv[2]) : 32;
     const int NUM_ITERATIONS = (argc > 3) ? atoi(argv[3]) : 10000;
-    const int BATCH_SIZE = (argc > 4) ? atoi(argv[4]) : 256;
+    const int NUM_PARTICLES =  (argc > 4) ? atoi(argv[4]) : 100000;
 
     const int NUM_BATCHES = (NUM_PARTICLES / BATCH_SIZE);
     const int LAST_BATCH = NUM_PARTICLES - (BATCH_SIZE * NUM_BATCHES);
@@ -160,3 +160,4 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+

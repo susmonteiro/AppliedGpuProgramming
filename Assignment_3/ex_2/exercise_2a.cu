@@ -88,7 +88,6 @@ int main(int argc, char **argv) {
         gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, NUM_PARTICLES);
 		cudaMemcpy(particles_gpu, d_particles, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
     }
-    cudaDeviceSynchronize();
 
     double iGPUElaps = cpuSecond() - iStart;
     printf("Computing on the GPU... Done!\n\n");
