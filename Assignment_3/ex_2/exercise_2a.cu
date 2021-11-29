@@ -52,9 +52,9 @@ void generatePositions(Particle* particles_cpu, Particle* particles_gpu, int npa
 }
 
 int main(int argc, char **argv) {
-    int NUM_PARTICLES = 10000;
+    int NUM_PARTICLES = 100000;
     int BLOCK_SIZE = 32;
-    int NUM_ITERATIONS = 1;
+    int NUM_ITERATIONS = 10000;
 
     if (argc > 1) NUM_PARTICLES = atoi(argv[1]);
     if (argc > 2) BLOCK_SIZE = atoi(argv[2]);

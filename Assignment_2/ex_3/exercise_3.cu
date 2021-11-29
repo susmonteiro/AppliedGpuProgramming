@@ -12,31 +12,47 @@ double cpuSecond() {
    return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
 }
 
-__global__ void gpu_update_position(Particle* particles, float* rnx, float* rny, float* rnz) {
+__global__ void gpu_update_position(Particle* particles, int nparticles) {
     const int i = threadIdx.x + blockDim.x * blockIdx.x;
-    particles[i].velocity.x = particles[i].velocity.x + rnx[i];
-    particles[i].velocity.y = particles[i].velocity.y + rny[i];
-    particles[i].velocity.z = particles[i].velocity.z + rnz[i];
-    particles[i].position.x = particles[i].position.x + particles[i].velocity.x;
-    particles[i].position.y = particles[i].position.y + particles[i].velocity.y;
-    particles[i].position.z = particles[i].position.z + particles[i].velocity.z;
+
+    if (i < nparticles) {
+        particles[i].velocity.x = particles[i].position.x / 10;
+        particles[i].velocity.y = particles[i].position.y / 10;
+        particles[i].velocity.z = particles[i].position.z / 10;
+        particles[i].position.x += particles[i].velocity.x;
+        particles[i].position.y += particles[i].velocity.y;
+        particles[i].position.z += particles[i].velocity.z;
+    }
 }
 
-void cpu_update_position(Particle* particles, float* random_x, float* random_y, float* random_z, int NUM_PARTICLES, int NUM_ITERATIONS) {
+void cpu_update_position(Particle* particles, int NUM_PARTICLES, int NUM_ITERATIONS) {
     for(int iter = 0; iter < NUM_ITERATIONS; iter++) {
         for (int i = 0; i < NUM_PARTICLES; i++) {
-            particles[i].velocity.x = particles[i].velocity.x + random_x[i];
-            particles[i].velocity.y = particles[i].velocity.y + random_y[i];
-            particles[i].velocity.z = particles[i].velocity.z + random_z[i];
-            particles[i].position.x = particles[i].position.x + particles[i].velocity.x;
-            particles[i].position.y = particles[i].position.y + particles[i].velocity.y;
-            particles[i].position.z = particles[i].position.z + particles[i].velocity.z;
+            particles[i].velocity.x = particles[i].position.x / 10;
+            particles[i].velocity.y = particles[i].position.y / 10;
+            particles[i].velocity.z = particles[i].position.z / 10;
+            particles[i].position.x += particles[i].velocity.x;
+            particles[i].position.y += particles[i].velocity.y;
+            particles[i].position.z += particles[i].velocity.z;
         }
     }
 }
 
+void generatePositions(Particle* particles_cpu, Particle* particles_gpu, int nparticles) {
+    for (int i = 0; i < nparticles; i++) {
+        particles_cpu[i].position.x = (float)rand()/RAND_MAX;
+        particles_cpu[i].position.y = (float)rand()/RAND_MAX;
+        particles_cpu[i].position.z = (float)rand()/RAND_MAX;
+        particles_gpu[i].position.x = particles_cpu[i].position.x;
+        particles_gpu[i].position.y = particles_cpu[i].position.y;
+        particles_gpu[i].position.z = particles_cpu[i].position.z;
+        particles_cpu[i].velocity = {};
+        particles_gpu[i].velocity = {};
+    }
+}
+
 int main(int argc, char **argv) {
-    int NUM_PARTICLES = 10000;
+    int NUM_PARTICLES = 100000;
     int BLOCK_SIZE = 32;
     int NUM_ITERATIONS = 10000;
 
@@ -47,38 +63,22 @@ int main(int argc, char **argv) {
     Particle* particles_cpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
     Particle* particles_gpu = (Particle *)malloc(sizeof(Particle) * NUM_PARTICLES);
 
-    float *rn_x = (float*)malloc(sizeof(float) * NUM_PARTICLES);
-    float *rn_y = (float*)malloc(sizeof(float) * NUM_PARTICLES);
-    float *rn_z = (float*)malloc(sizeof(float) * NUM_PARTICLES);
-
-    for (int i = 0; i < NUM_PARTICLES; i++) {
-        rn_x[i] = ((float)(rand() % 10000 - 5000))/10000000000;
-        rn_y[i] = ((float)(rand() % 10000 - 5000))/10000000000;
-        rn_z[i] = ((float)(rand() % 10000 - 5000))/10000000000;
-    } 
+    generatePositions(particles_cpu, particles_gpu, NUM_PARTICLES);
 
     double iStart = cpuSecond();
-    cpu_update_position(particles_cpu, rn_x, rn_y, rn_z, NUM_PARTICLES, NUM_ITERATIONS);
+    cpu_update_position(particles_cpu, NUM_PARTICLES, NUM_ITERATIONS);
     double iCPUElaps = cpuSecond() - iStart;
     printf("Computing on the CPU... Done!\n\n");
     printf("Time elapsed CPU: %f\n", iCPUElaps);
 
     Particle *d_particles;
-    float *d_rnx, *d_rny, *d_rnz;
 
     cudaMalloc(&d_particles, NUM_PARTICLES*sizeof(Particle));
-    cudaMalloc(&d_rnx, NUM_PARTICLES*sizeof(float));
-    cudaMalloc(&d_rny, NUM_PARTICLES*sizeof(float));
-    cudaMalloc(&d_rnz, NUM_PARTICLES*sizeof(float));
-
-    cudaMemcpy(d_rnx, rn_x, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_rny, rn_y, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_rnz, rn_z, NUM_PARTICLES*sizeof(float), cudaMemcpyHostToDevice);
     cudaMemcpy(d_particles, particles_gpu, NUM_PARTICLES*sizeof(Particle), cudaMemcpyHostToDevice);
     
     iStart = cpuSecond();
     for (int iter = 0; iter < NUM_ITERATIONS; iter++) {
-        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, d_rnx, d_rny, d_rnz);
+        gpu_update_position<<<(NUM_PARTICLES + BLOCK_SIZE - 1) / BLOCK_SIZE, BLOCK_SIZE>>>(d_particles, NUM_PARTICLES);
     }
     cudaDeviceSynchronize();
     double iGPUElaps = cpuSecond() - iStart;
@@ -99,15 +99,9 @@ int main(int argc, char **argv) {
     else printf("Comparing the output for each implementation... Incorrect :(\n");
 
     cudaFree(d_particles);
-    cudaFree(d_rnx);
-    cudaFree(d_rny);
-    cudaFree(d_rnz);
 
     free(particles_cpu);
     free(particles_gpu);
-    free(rn_x);
-    free(rn_y);
-    free(rn_z);
 
     return 0;
 }
