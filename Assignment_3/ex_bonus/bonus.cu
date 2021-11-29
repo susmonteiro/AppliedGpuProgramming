@@ -47,12 +47,10 @@ double elapsed(struct timeval t0, struct timeval t1)
 /* compare matrix with abs difference */
 void compare_matrix(float *matrix_a, float *matrix_b, long size, double threshold)
 {
-	int num = 0;
 	for (long i = 0; i < size*size; i++) {
 		if (fabs((double)matrix_a[i] - (double)matrix_b[i]) > threshold) {
-			++num;
-			fprintf(stderr, "[%d] Compare matrix failed: %f vs %f\n", num, matrix_a[i], matrix_b[i]);
-			// exit(1);
+			fprintf(stderr, "Compare matrix failed: %f vs %f\n", matrix_a[i], matrix_b[i]);
+			exit(1);
 		}
 	}
 }
@@ -185,7 +183,7 @@ void cublas_sgemm(float *C, float *A, float *B, long size)
 
 	gettimeofday(&t0, NULL);
 	/* TODO fill in the blanks, do C = BA instead of C = AB */
-	cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, TILE_SIZE, TILE_SIZE, TILE_SIZE, &alpha, B, TILE_SIZE, A, TILE_SIZE, &beta, C, TILE_SIZE);
+	cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, size, size, size, &alpha, B, size, A, size, &beta, C, size);
 	checkCudaErrors(cudaDeviceSynchronize());
 	gettimeofday(&t1, NULL);
 	cublasDestroy(handle);
