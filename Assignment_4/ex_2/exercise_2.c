@@ -16,18 +16,18 @@ const char* clGetErrorString(int);
 const char *mykernel = "\
   __kernel\
   void saxpy(\
-    __global float a,\
+    float a,\
     __global float* x,\
     __global float* y\
   ) {\
     int index = get_global_id(0);\
-    y[index] += a * x[index];\
+    y[index] += a*x[index];\
   }"; 
 
 void cpu_saxpy(float a, float* x, float* y, float Y[N]) {
   int cnt = 0;
   for (int i = 0; i < N; i++) {
-    y[i] += a * x[i];
+    y[i] += a*x[i];
     if (abs(y[i] - Y[i]) < 0.0001) ++cnt;
   }
   
@@ -61,7 +61,7 @@ int main(int argc, char *argv) {
 
   // initialise on GPU
   int array_size = N * sizeof(float);
-  float X[N], Y[N], A = 2.0;
+  float X[N], Y[N], A = (cl_float)2.0;
   cl_mem X_dev = clCreateBuffer (context, CL_MEM_READ_ONLY, array_size, NULL, &err); 
   cl_mem Y_dev = clCreateBuffer (context, CL_MEM_READ_WRITE, array_size, NULL, &err); 
 
@@ -82,14 +82,14 @@ int main(int argc, char *argv) {
   cl_program saxpy = clCreateProgramWithSource(context, 1, (const char **)&mykernel, NULL, &err); CHK_ERROR(err);
   err = clBuildProgram(saxpy, 1, device_list, NULL, NULL, NULL); CHK_ERROR(err);
 
-  cl_kernel kernel = clCreateKernel(saxpy, "mykernel", &err); CHK_ERROR(err);
+  cl_kernel kernel = clCreateKernel(saxpy, "saxpy", &err); CHK_ERROR(err);
 
   err = clSetKernelArg(kernel, 0, sizeof(cl_float), (void *) &A); CHK_ERROR(err);
   err = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *) &X_dev); CHK_ERROR(err);
   err = clSetKernelArg(kernel, 2, sizeof(cl_mem), (void *) &Y_dev); CHK_ERROR(err);
 
-  size_t n_workitem = N;
-  size_t workgroup_size = 64;
+  size_t n_workitem = (int)(N / 256 + 1) * 256;
+  size_t workgroup_size = 256;
 
   // Launch the kernel!
   err = clEnqueueNDRangeKernel (cmd_queue, kernel, 1, NULL, &n_workitem, &workgroup_size, 0, NULL, NULL); CHK_ERROR(err);
