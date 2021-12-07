@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <CL/cl.h>
-#define VSIZE 1024
 
 // This is a macro for checking the error variable.
 #define CHK_ERROR(err) if (err != CL_SUCCESS) fprintf(stderr,"Error: %s\n",clGetErrorString(err));
@@ -15,8 +14,8 @@ const char* clGetErrorString(int);
 const char *mykernel = 
 "__kernel \n"
 "void k () \n"
-"{ int index = get_global_id(0); \n"
-" printf(\"Hello World! My threadId is %d\\n\", index); } \n"
+"{ int index = get_local_id(0); int index2 = get_local_id(1);  int index3 = get_local_id(2); \n"
+"printf(\"Hello World! My threadId is %dx%dx%d\\n\", index, index2, index3); } \n"
 ;
 
 
@@ -51,13 +50,25 @@ int main(int argc, char *argv) {
   fprintf(stderr,"Build error: %s\n", buffer); return 0; }
   cl_kernel kernel = clCreateKernel(program, "k", &err);
 
-  size_t n_workitem = VSIZE;
-  size_t workgroup_size = 64;
-  err = clEnqueueNDRangeKernel (cmd_queue, kernel, 1, NULL, &n_workitem, &workgroup_size, 0, NULL, NULL);
+
+  size_t* global_work_size = (size_t*)malloc(sizeof(size_t)*3);
+  size_t* local_work_size = (size_t*)malloc(sizeof(size_t)*3);
+
+  global_work_size[0] = 16;
+  global_work_size[1] = 4;
+  global_work_size[2] = 4;
+  local_work_size[0] = 8;
+  local_work_size[1] = 2;
+  local_work_size[2] = 2;
+
+  err = clEnqueueNDRangeKernel (cmd_queue, kernel, 3, NULL, global_work_size, local_work_size, 0, NULL, NULL);
+  err = clFinish(cmd_queue);
 
   // Finally, release all that we have allocated.
   err = clReleaseCommandQueue(cmd_queue);CHK_ERROR(err);
   err = clReleaseContext(context);CHK_ERROR(err);
+  free(global_work_size);
+  free(local_work_size);
   free(platforms);
   free(device_list);
   
