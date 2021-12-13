@@ -59,7 +59,7 @@ int main(int argc, char *argv) {
 
   // compute on GPU
   double gpuStart = cpuSecond();
-  #pragma acc parallel loop 
+  #pragma acc parallel loop copyin(a) copyin(x[0:N]) copyout(y[0:N])
   for (int i = 0; i < N; i++) {
 	Y[i] += a*X[i];
   }
