@@ -38,7 +38,6 @@ void cpu_saxpy(float a, float* x, float* y, float Y[N]) {
     if (abs(y[i] - Y[i]) < 0.0001) ++cnt;
   }
 
-  printf("Computing SAXPY on the CPU... Done!\n\n");
 
   if (cnt == N) printf("Comparing the output for each implementation... Correct!");
   else printf("Comparing the output for each implementation... Incorrect :(");
@@ -60,29 +59,25 @@ int main(int argc, char *argv) {
 
   // compute on GPU
   double gpuStart = cpuSecond();
-  #pragma acc parallel loop copyin(a) copyin(X[0:SIZE]) copy(Y[0:SIZE])
+  #pragma acc parallel loop 
   for (int i = 0; i < N; i++) {
 	Y[i] += a*X[i];
   }
   double gpuElaps = cpuSecond() - gpuStart;
 
   printf("Computing SAXPY on the GPU... Done!\n\n");
-
-  printf("Computing SAXPY on the CPU... Done!\n\n");
+  printf("GPU time: %d \n\n", gpuElaps);
 
   // check the result with CPU
   double cpuStart = cpuSecond();
   cpu_saxpy(a, x, y, Y); // y contains the result
   double cpuElaps = cpuSecond() - cpuStart;
 
+  printf("Computing SAXPY in the CPU... Done!\n\n");
+  printf("CPU time: %d \n\n", cpuElaps);
+
   free(x);
   free(y);
-
-  // Finally, release all that we have allocated.
-  err = clReleaseCommandQueue(cmd_queue);CHK_ERROR(err);
-  err = clReleaseContext(context);CHK_ERROR(err);
-  free(platforms);
-  free(device_list);
 
   return 0;
 }
