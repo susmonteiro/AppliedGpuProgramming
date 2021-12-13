@@ -8,9 +8,13 @@
 #define DIM 3
 
 
-typedef struct particle {
-    float position[DIM];
-    float velocity[DIM];
+typedef struct  particle {
+    cl_float pos_x;
+    cl_float pos_y;
+    cl_float pos_z;
+    cl_float v_x;
+    cl_float v_y;
+    cl_float v_z;
 } Particle;
 
 // This is a macro for checking the error variable.
@@ -21,59 +25,70 @@ const char* clGetErrorString(int);
 
 
 const char *mykernel = "\
+  typedef struct{\
+    float pos_x;\
+    float pos_y;\
+    float pos_z;\
+    float v_x;\
+    float v_y;\
+    float v_z;\
+  } Particle;\
   __kernel\
   void update_particles(\
     __global Particle* particles,\
+    int size\
   ) {\
     int i = get_global_id(0);\
-    particles[i].velocity[0] = particles[i].position[0] / 10;\
-    particles[i].velocity[1] = particles[i].position[1] / 10;\
-    particles[i].velocity[2] = particles[i].position[2] / 10;\
-    particles[i].position[0] += particles[i].velocity[0];\
-    particles[i].position[1] += particles[i].velocity[1];\
-    particles[i].position[2] += particles[i].velocity[2];\
+    if(i >= size) return;\
+    particles[i].v_x = particles[i].pos_x / 10;\
+    particles[i].v_y = particles[i].pos_y / 10;\
+    particles[i].v_z = particles[i].pos_z / 10;\
+    particles[i].pos_x += particles[i].v_x;\
+    particles[i].pos_y += particles[i].v_y;\
+    particles[i].pos_z += particles[i].v_z;\
   }"; 
 
 void cpu_update_particles(Particle* particles, int NUM_ITERATIONS) {
     for(int iter = 0; iter < NUM_ITERATIONS; iter++) {
         for (int i = 0; i < NUM_PARTICLES; i++) {
-            particles[i].velocity[0] = particles[i].position[0] / 10;
-            particles[i].velocity[1] = particles[i].position[1] / 10;
-            particles[i].velocity[2] = particles[i].position[2] / 10;
-            particles[i].position[0] += particles[i].velocity[0];
-            particles[i].position[1] += particles[i].velocity[1];
-            particles[i].position[2] += particles[i].velocity[2];
+            particles[i].v_x = particles[i].pos_x / 10;
+            particles[i].v_y = particles[i].pos_y / 10;
+            particles[i].v_z = particles[i].pos_z / 10;
+            particles[i].pos_x += particles[i].v_x;
+            particles[i].pos_y += particles[i].v_y;
+            particles[i].pos_z += particles[i].v_z;
         }
     }
 }
   
-void generatePositions(Particle* particles_cpu, Particle particles_gpu[NUM_PARTICLES]) {
+void generatePositions(Particle* particles_cpu, Particle* particles_gpu) {
     for (int i = 0; i < NUM_PARTICLES; i++) {
-        particles_cpu[i].position[0] = (float)rand()/RAND_MAX;
-        particles_cpu[i].position[1] = (float)rand()/RAND_MAX;
-        particles_cpu[i].position[2] = (float)rand()/RAND_MAX;
-        particles_gpu[i].position[0] = particles_cpu[i].position[0];
-        particles_gpu[i].position[1] = particles_cpu[i].position[1];
-        particles_gpu[i].position[2] = particles_cpu[i].position[2];
+        particles_cpu[i].pos_x = (cl_float)rand()/RAND_MAX;
+        particles_cpu[i].pos_y = (cl_float)rand()/RAND_MAX;
+        particles_cpu[i].pos_z = (cl_float)rand()/RAND_MAX;
+        particles_gpu[i].pos_x = particles_cpu[i].pos_x;
+        particles_gpu[i].pos_y = particles_cpu[i].pos_y;
+        particles_gpu[i].pos_z = particles_cpu[i].pos_z;
     }
 }
 
-void compare_results(Particle particles_gpu[NUM_PARTICLES], Particle* particles_cpu) {
+void compare_results(Particle* particles_gpu, Particle* particles_cpu) {
   int i;
   for (i = 0; i < NUM_PARTICLES; i++) {
-        if (abs(particles_cpu[i].position[0] - particles_gpu[i].position[0]) > 0.0001
-            && abs(particles_cpu[i].position[1] - particles_gpu[i].position[1]) > 0.0001
-            && abs(particles_cpu[i].position[2] - particles_gpu[i].position[2]) > 0.0001) break;
+        printf("%f %f\n", particles_cpu[i].pos_x, particles_gpu[i].pos_x);
+        if (abs(particles_cpu[i].pos_x - particles_gpu[i].pos_x) > 0.0001
+            || abs(particles_cpu[i].pos_y - particles_gpu[i].pos_y) > 0.0001
+            || abs(particles_cpu[i].pos_z - particles_gpu[i].pos_z) > 0.0001) break;
     }
 
   if (i == NUM_PARTICLES) printf("Comparing the output for each implementation... Correct!\n"); 
   else printf("Comparing the output for each implementation... Incorrect :(\n");
 }
 
-int main(int argc, char **argv) {
-  printf("Starting the program...");
+int main(int argc, char *argv[]) {
+  printf("Starting the program...\n");
   int BLOCK_SIZE = 32;
-  int NUM_ITERATIONS = 10000;
+  int NUM_ITERATIONS = 10;
 
   // read BLOCK_SIZE from terminal
   if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
@@ -103,12 +118,12 @@ int main(int argc, char **argv) {
   // initialise on GPU
   int array_size = NUM_PARTICLES * sizeof(Particle);
 
-  Particle particles_gpu[NUM_PARTICLES];
 
   cl_mem particles_dev = clCreateBuffer (context, CL_MEM_READ_WRITE, array_size, NULL, &err); 
 
   // initialize on CPU
   Particle* particles_cpu = (Particle *)malloc(array_size);
+  Particle* particles_gpu = (Particle *)malloc(array_size);
 
   generatePositions(particles_cpu, particles_gpu);
 
@@ -134,10 +149,12 @@ int main(int argc, char **argv) {
   err = clFlush(cmd_queue); CHK_ERROR(err); 
   err = clFinish(cmd_queue); CHK_ERROR(err);
 
-  printf("Computing update_particles on the CPU... Done!\n\n");
+  printf("Computing update_particles on the GPU... Done!\n\n");
 
   // check the result with CPU
   cpu_update_particles(particles_cpu, NUM_ITERATIONS);
+  printf("Computing update_particles on the CPU... Done!\n\n");
+
   compare_results(particles_gpu, particles_cpu);
 
   free(particles_cpu);
