@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <CL/cl.h>
+#include <sys/time.h>
 
 #define N 10000
 
@@ -22,7 +23,13 @@ const char *mykernel = "\
   ) {\
     int index = get_global_id(0);\
     y[index] += a*x[index];\
-  }"; 
+  }";
+
+double cpuSecond() {
+	struct timeval tp;
+	gettimeofday(&tp,NULL);
+	return ((double)tp.tv_sec + (double)tp.tv_usec*1.e-6);
+}
 
 void cpu_saxpy(float a, float* x, float* y, float Y[N]) {
   int cnt = 0;
@@ -30,10 +37,10 @@ void cpu_saxpy(float a, float* x, float* y, float Y[N]) {
     y[i] += a*x[i];
     if (abs(y[i] - Y[i]) < 0.0001) ++cnt;
   }
-  
+
   printf("Computing SAXPY on the CPU... Done!\n\n");
 
-  if (cnt == N) printf("Comparing the output for each implementation... Correct!"); 
+  if (cnt == N) printf("Comparing the output for each implementation... Correct!");
   else printf("Comparing the output for each implementation... Incorrect :(");
 }
 
@@ -50,20 +57,20 @@ int main(int argc, char *argv) {
   err = clGetDeviceIDs( platforms[0], CL_DEVICE_TYPE_GPU, 0,NULL, &n_devices);CHK_ERROR(err);
   device_list = (cl_device_id *) malloc(sizeof(cl_device_id)*n_devices);
   err = clGetDeviceIDs( platforms[0],CL_DEVICE_TYPE_GPU, n_devices, device_list, NULL);CHK_ERROR(err);
-  
+
   // Create and initialize an OpenCL context
   cl_context context = clCreateContext( NULL, n_devices, device_list, NULL, NULL, &err);CHK_ERROR(err);
 
   // Create a command queue
-  cl_command_queue cmd_queue = clCreateCommandQueue(context, device_list[0], 0, &err);CHK_ERROR(err); 
+  cl_command_queue cmd_queue = clCreateCommandQueue(context, device_list[0], 0, &err);CHK_ERROR(err);
 
   /* Insert your own code here */
 
   // initialise on GPU
   int array_size = N * sizeof(float);
   float X[N], Y[N], A = (cl_float)2.0;
-  cl_mem X_dev = clCreateBuffer (context, CL_MEM_READ_ONLY, array_size, NULL, &err); 
-  cl_mem Y_dev = clCreateBuffer (context, CL_MEM_READ_WRITE, array_size, NULL, &err); 
+  cl_mem X_dev = clCreateBuffer (context, CL_MEM_READ_ONLY, array_size, NULL, &err);
+  cl_mem Y_dev = clCreateBuffer (context, CL_MEM_READ_WRITE, array_size, NULL, &err);
 
   // initialize on CPU
   float* x = (float*)malloc(N * sizeof(float));
@@ -93,10 +100,10 @@ int main(int argc, char *argv) {
 
   // Launch the kernel!
   err = clEnqueueNDRangeKernel (cmd_queue, kernel, 1, NULL, &n_workitem, &workgroup_size, 0, NULL, NULL); CHK_ERROR(err);
-  
+
   // Transfer the data from C back
   err = clEnqueueReadBuffer (cmd_queue, Y_dev, CL_TRUE, 0, array_size, Y, 0, NULL, NULL); CHK_ERROR(err);
-  err = clFlush(cmd_queue); CHK_ERROR(err); 
+  err = clFlush(cmd_queue); CHK_ERROR(err);
   err = clFinish(cmd_queue); CHK_ERROR(err);
 
   printf("Computing SAXPY on the CPU... Done!\n\n");
@@ -106,13 +113,13 @@ int main(int argc, char *argv) {
 
   free(x);
   free(y);
-  
+
   // Finally, release all that we have allocated.
   err = clReleaseCommandQueue(cmd_queue);CHK_ERROR(err);
   err = clReleaseContext(context);CHK_ERROR(err);
   free(platforms);
   free(device_list);
-  
+
   return 0;
 }
 
