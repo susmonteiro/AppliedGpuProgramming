@@ -3,8 +3,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <CL/cl.h>
+#include <windows.h> // Performance measuring on windows
 
-#define NUM_PARTICLES 100000
+#define NUM_PARTICLES 1000000
 #define DIM 3
 
 
@@ -75,7 +76,6 @@ void generatePositions(Particle* particles_cpu, Particle* particles_gpu) {
 void compare_results(Particle* particles_gpu, Particle* particles_cpu) {
   int i;
   for (i = 0; i < NUM_PARTICLES; i++) {
-        printf("%f %f\n", particles_cpu[i].pos_x, particles_gpu[i].pos_x);
         if (abs(particles_cpu[i].pos_x - particles_gpu[i].pos_x) > 0.0001
             || abs(particles_cpu[i].pos_y - particles_gpu[i].pos_y) > 0.0001
             || abs(particles_cpu[i].pos_z - particles_gpu[i].pos_z) > 0.0001) break;
@@ -89,6 +89,11 @@ int main(int argc, char *argv[]) {
   printf("Starting the program...\n");
   int BLOCK_SIZE = 32;
   int NUM_ITERATIONS = 10;
+
+  LARGE_INTEGER frequency;
+  LARGE_INTEGER start;
+  LARGE_INTEGER end;
+  double interval;
 
   // read BLOCK_SIZE from terminal
   if (argc > 1) BLOCK_SIZE = atoi(argv[1]);
@@ -137,23 +142,34 @@ int main(int argc, char *argv[]) {
   cl_kernel kernel = clCreateKernel(update_particles, "update_particles", &err); CHK_ERROR(err);
 
   err = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *) &particles_dev); CHK_ERROR(err);
+  int N = NUM_PARTICLES;
+  err = clSetKernelArg(kernel, 1, sizeof(int), (void*) &N); CHK_ERROR(err);
 
   size_t n_workitem = (int)(NUM_PARTICLES / BLOCK_SIZE + 1) * BLOCK_SIZE;
   size_t workgroup_size = BLOCK_SIZE;
 
   // Launch the kernel!
-  err = clEnqueueNDRangeKernel (cmd_queue, kernel, 1, NULL, &n_workitem, &workgroup_size, 0, NULL, NULL); CHK_ERROR(err);
+
+  QueryPerformanceFrequency(&frequency);
+  QueryPerformanceCounter(&start);
+  for(int i = 0; i < NUM_ITERATIONS; i++) {
+    err = clEnqueueNDRangeKernel (cmd_queue, kernel, 1, NULL, &n_workitem, &workgroup_size, 0, NULL, NULL); CHK_ERROR(err);   
+  }
   
   // Transfer the data from C back
   err = clEnqueueReadBuffer (cmd_queue, particles_dev, CL_TRUE, 0, array_size, particles_gpu, 0, NULL, NULL); CHK_ERROR(err);
   err = clFlush(cmd_queue); CHK_ERROR(err); 
   err = clFinish(cmd_queue); CHK_ERROR(err);
+  QueryPerformanceCounter(&end);
 
-  printf("Computing update_particles on the GPU... Done!\n\n");
+  printf("Computing update_particles on the GPU... Done in %fs!\n\n", (double) (end.QuadPart - start.QuadPart) / frequency.QuadPart);
 
   // check the result with CPU
+  QueryPerformanceFrequency(&frequency);
+  QueryPerformanceCounter(&start);
   cpu_update_particles(particles_cpu, NUM_ITERATIONS);
-  printf("Computing update_particles on the CPU... Done!\n\n");
+  QueryPerformanceCounter(&end);
+  printf("Computing update_particles on the CPU... Done %fs!\n\n", (double) (end.QuadPart - start.QuadPart) / frequency.QuadPart);
 
   compare_results(particles_gpu, particles_cpu);
 
